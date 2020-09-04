@@ -35,12 +35,12 @@ char *format_size(off_t s) {
 	if (i) {
 		off_t t = (off_t)d;
 		if ((long double)t == d) {
-			snprintf(print_buf, PRINT_BUF_SIZE, "%llu%c", t, unit[i]);
+			snprintf(print_buf, PRINT_BUF_SIZE, "%ju%c", (intmax_t)t, unit[i]);
 		} else {
 			snprintf(print_buf, PRINT_BUF_SIZE, "%.1Lf%c", d, unit[i]);
 		}
 	} else {
-		snprintf(print_buf, PRINT_BUF_SIZE, "%llu%c", s, unit[i]);
+		snprintf(print_buf, PRINT_BUF_SIZE, "%ju%c", (intmax_t)s, unit[i]);
 	}
 	return print_buf;
 }
@@ -408,7 +408,7 @@ static void check_range(fentry_s **entries, unsigned int from, unsigned int to) 
 	for (i=from; i<to; i++) {
 		fe = entries[i];
 		l->api->push((lst_t)l, fe);
-		MSG(_("\t%s (%llu bytes, idx: %u)\n"), fe->path, fe->size, i);
+		MSG(_("\t%s (%zu bytes, idx: %u)\n"), fe->path, (size_t)fe->size, i);
 	}
 	check_list(l, fe->size);
 	
@@ -422,14 +422,14 @@ static void check_range_fnames(fentry_s **entries, unsigned int from, unsigned i
 }
 
 static bool check_files(fentry_s **entries, size_t len) {
-	INFO(_("found %u files...\n"), len);
+	INFO(_("found %zu files...\n"), len);
 	qsort(entries, len, sizeof(fentry_s *), comp_fentry);
 	
 	if (opts.msglevel == DEBUG) {
 		unsigned int i;
 		for (i=0; i<len; i++) {
 			fentry_s *fe = entries[i];
-			DBG("%llu\t%s\n", fe->size, fe->path);
+			DBG("%zu\t%s\n", (size_t)fe->size, fe->path);
 		}
 	}
 	

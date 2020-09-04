@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <stddef.h>	/* ptrdiff_t */
 
 #include "dl_list.h"
 #include "fdf.h"
@@ -29,14 +30,15 @@ static void celink_free(void *c) {
 		ERROR("freeing celink with zero sized scan-list o_O\n");
 	} else {
 		fentry_s *fe = l->api->data(l, l->api->first(l));
-		DBG("freeing celink with first '%s' @ 0x%08x...\n", fe->path, (unsigned int)&(cel->scan));
+		DBG("freeing celink with first '%s' @ 0x%08tx...\n", fe->path, (ptrdiff_t)&(cel->scan));
 	}
 	cel->scan->api->free((lst_t *)&(cel->scan));
 	free(cel);
 }
 
 static int memcmp_at(void *m1, void *m2, size_t len, ssize_t *at) {
-	DBG("memcmp_at(0x%08x, 0x%08x, %u, 0x%08x)\n", (unsigned int)m1, (unsigned int)m2, len, (unsigned int)at);
+	DBG("memcmp_at(0x%08tx, 0x%08tx, %zu, 0x%08tx)\n",
+	    (ptrdiff_t)m1, (ptrdiff_t)m2, len, (ptrdiff_t)at);
 	int ret = memcmp(m1, m2, len);
 	if (ret == 0)
 		return 0;
@@ -81,7 +83,7 @@ static lst_entry_t insert(dlst_t l, lst_entry_t en, fentry_s *fe, off_t off, uns
 	cel = calloc(1, sizeof(celink_t));
 	cel->pos = off;
 	cel->val = val;
-	DBG("init new list for cel @ 0x%08x\n", (unsigned int)&(cel->scan));
+	DBG("init new list for cel @ 0x%08tx\n", (ptrdiff_t)&(cel->scan));
 	dlst.init((lst_t *)&(cel->scan));
 	
 	en = l->api->insert((lst_t)l, en, cel, (en == NULL) ^ lt);
@@ -101,7 +103,7 @@ static void * feopen(dlst_t l, lst_entry_t *en, int *fd, off_t off, size_t size)
 		DBG("got fe: %s\n", fe->path);
 		if (S_ISLNK(fe->mode)) {
 			if (off != 0) {
-				ERROR("off != 0 (%llu) @ '%s'\n", off, fe->path);
+				ERROR("off != 0 (%ju) @ '%s'\n", (intmax_t)off, fe->path);
 				continue;
 			}
 			void *buf = malloc(size);
@@ -122,7 +124,7 @@ static void * feopen(dlst_t l, lst_entry_t *en, int *fd, off_t off, size_t size)
 				continue;
 			}
 			
-			DBG(_("mmapping '%s' from off %llu, size: %u...\n"), fe->path, off, size);
+			DBG(_("mmapping '%s' from off %ju, size: %zu...\n"), fe->path, (intmax_t)off, size);
 			void *mem = mmap(NULL, size, PROT_READ, MAP_PRIVATE, _fd, off);
 			if (mem == (void *)-1) {
 				ERROR(_("error mmapping '%s': %s\n"), fe->path, strerror(errno));
@@ -130,7 +132,7 @@ static void * feopen(dlst_t l, lst_entry_t *en, int *fd, off_t off, size_t size)
 				continue;
 			}
 			*fd = _fd;
-			DBG("mmap returned: 0x%08x\n", (unsigned int)mem);
+			DBG("mmap returned: 0x%08tx\n", (ptrdiff_t)mem);
 			return mem;
 		}
 	}
@@ -147,22 +149,25 @@ static void feclose(fentry_s *fe, void *mem, int fd, size_t len) {
 	}
 }
 
-static bool scan_celink(dlst_t rlist, dlst_t tlist, lst_entry_t rlentry, size_t chunk_len, off_t size) {
+static bool scan_celink(dlst_t rlist, dlst_t tlist, lst_entry_t rlentry,
+                        size_t chunk_len, off_t size) {
 	
 	const size_t page_size = sysconf(_SC_PAGE_SIZE);
 	celink_t *cel = rlist->api->data((lst_t)rlist, rlentry);
 	
 	while (cel->pos < size && !interrupted) {
 		off_t pa_off = cel->pos & ~(page_size - 1);
-		size_t len = min(size - pa_off, chunk_len);
+		size_t len = min((size_t)(size - pa_off), chunk_len);
 		
 		
 		lst_entry_t enroot = cel->scan->api->first((lst_t)cel->scan);
 		int fdroot;
 		fentry_s *feroot = cel->scan->api->data((lst_t)cel->scan, enroot);
 		
-		DBG("scanning chunk (size: %llu bytes, pos: %llu, chunk_len: %u, scan @ 0x%08x) with pa_off: %llu, len: %u\n",
-				feroot->size, cel->pos, chunk_len, (unsigned int)&(cel->scan), pa_off, len);
+		DBG("scanning chunk (size: %zu bytes, pos: %ju, chunk_len: %zu, "
+		    "scan @ 0x%08tx) with pa_off: %ju, len: %zu\n",
+		    (size_t)feroot->size, (intmax_t)cel->pos, chunk_len,
+		    (ptrdiff_t)&(cel->scan), (intmax_t)pa_off, len);
 		// return true;
 		
 		unsigned char *rmem = feopen(cel->scan, &enroot, &fdroot, pa_off, len);
@@ -184,13 +189,15 @@ static bool scan_celink(dlst_t rlist, dlst_t tlist, lst_entry_t rlentry, size_t 
 			
 			ssize_t pos = -1;
 			long int delta = memcmp_at(mem, rmem, len, &pos);
-			DBG("memcmp_at for '%s' returned delta %ld, pos: %d", fe->path, delta, pos);
+			DBG("memcmp_at for '%s' returned delta %ld, pos: %zd",
+			    fe->path, delta, pos);
 			if (pos > -1) DBG(", mem: %d, rmem: %d", mem[pos], rmem[pos]);
 			DBG("\n");
 			if (delta == 0) {
 				// nothing to do, advance to next ce
 			} else {
-				MSG(_("%s and %s differ at offset 0x%x\n"), fe->path, feroot->path, pos);
+				MSG(_("%s and %s differ at offset 0x%zx\n"),
+				    fe->path, feroot->path, pos);
 				lst_entry_t ins_en = insert(rlist, rlentry, fe, pa_off + pos, mem[pos], delta < 0);
 				tlist->api->push((lst_t)tlist, ins_en);
 				// prev always exists due to enroot
