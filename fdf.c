@@ -85,7 +85,7 @@ start:
 				char *wd = get_current_dir_name();
 				size_t wd_n = strlen(wd);
 				r = realloc(r, wd_n + len);
-				strncpy(r, wd, wd_n);
+				memcpy(r, wd, wd_n);
 				free(wd);
 				nr = r + wd_n;
 				abs = true;
@@ -101,7 +101,7 @@ start:
 			if (nr > r || abs)
 				*nr++ = '/';
 			size_t token_n = strlen(token);
-			strncpy(nr, token, token_n);
+			memcpy(nr, token, token_n);
 			nr += token_n;
 			DBG("after adding '%s': %s\n", token, r);
 		}
