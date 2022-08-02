@@ -393,7 +393,7 @@ static void for_unique_range(
 		while (r == 0 && ++i < to)
 			r = comp(&(entries[ss]), &(entries[i]));
 		
-		if (i - ss > 1)
+		if ((i - ss > 1) ^ opts.single_out)
 			exec(entries, ss, i);
 	}
 }
